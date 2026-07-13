@@ -2,78 +2,17 @@ import streamlit as st
 import pandas as pd
 
 
-# -----------------------------
-# 화면 설정
-# -----------------------------
+# 페이지 설정
 st.set_page_config(
-    page_title="서울-양평 도시 열섬 분석",
-    page_icon="🌡️",
+    page_title="서울-양평 도시 열섬현상 분석",
     layout="wide"
 )
 
-
-# -----------------------------
-# CSS 디자인
-# -----------------------------
-st.markdown(
-    """
-    <style>
-    .main {
-        background-color: #f7f9fc;
-    }
-
-    .title-box {
-        background: linear-gradient(90deg,#4facfe,#00f2fe);
-        padding: 25px;
-        border-radius: 15px;
-        color:white;
-        text-align:center;
-        margin-bottom:30px;
-    }
-
-    .card {
-        background:white;
-        padding:20px;
-        border-radius:15px;
-        box-shadow:0 4px 10px rgba(0,0,0,0.08);
-        text-align:center;
-    }
-
-    h1 {
-        font-size:40px;
-    }
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+st.title("🌡️ 서울과 양평의 기온 비교 - 도시 열섬현상 분석")
 
 
 # -----------------------------
-# 제목
-# -----------------------------
-st.markdown(
-    """
-    <div class="title-box">
-        <h1>🌡️ 서울 vs 양평 기온 비교</h1>
-        <h3>도시 열섬현상 분석 웹 대시보드</h3>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-
-st.write(
-    """
-    서울(도시 지역)과 양평(비도시 지역)의 시간별 기온 데이터를 비교하여
-    도시 열섬 현상이 언제, 어느 계절에 강하게 나타나는지 분석합니다.
-    """
-)
-
-
-
-# -----------------------------
-# 데이터 읽기
+# 데이터 불러오기
 # -----------------------------
 @st.cache_data
 def load_data():
@@ -83,186 +22,120 @@ def load_data():
         encoding="cp949"
     )
 
-    yang = pd.read_csv(
+    yangpyeong = pd.read_csv(
         "양평_기온.csv",
         encoding="cp949"
     )
 
+    # 날짜 변환
     seoul["일시"] = pd.to_datetime(seoul["일시"])
-    yang["일시"] = pd.to_datetime(yang["일시"])
+    yangpyeong["일시"] = pd.to_datetime(yangpyeong["일시"])
 
-    return seoul, yang
+    return seoul, yangpyeong
 
 
-seoul, yang = load_data()
-
+seoul, yangpyeong = load_data()
 
 
 # -----------------------------
-# 데이터 정리
+# 데이터 전처리
 # -----------------------------
-seoul = seoul.rename(
-    columns={"기온(°C)": "서울기온"}
-)
-
-yang = yang.rename(
-    columns={"기온(°C)": "양평기온"}
-)
+seoul = seoul.rename(columns={"기온(°C)": "서울기온"})
+yangpyeong = yangpyeong.rename(columns={"기온(°C)": "양평기온"})
 
 
+# 날짜 기준 병합
 df = pd.merge(
-    seoul[["일시","서울기온"]],
-    yang[["일시","양평기온"]],
+    seoul[["일시", "서울기온"]],
+    yangpyeong[["일시", "양평기온"]],
     on="일시"
 )
 
 
+# 시간, 월 추출
 df["시각"] = df["일시"].dt.hour
 df["월"] = df["일시"].dt.month
 
-df["기온차"] = (
-    df["서울기온"]
-    -
-    df["양평기온"]
-)
+# 서울-양평 기온 차
+df["기온차"] = df["서울기온"] - df["양평기온"]
 
 
 
 # -----------------------------
-# 요약 카드
+# ① 1년간 기온 변화
 # -----------------------------
-st.subheader("📌 전체 분석 결과")
+st.header("① 1년간 서울과 양평의 기온 변화")
 
-
-avg = df["기온차"].mean()
-max_diff = df["기온차"].max()
-max_time = df.loc[
-    df["기온차"].idxmax(),
-    "일시"
+temperature_chart = df.set_index("일시")[
+    ["서울기온", "양평기온"]
 ]
 
-
-c1,c2,c3 = st.columns(3)
-
-
-with c1:
-    st.metric(
-        "평균 서울-양평 기온차",
-        f"{avg:.2f} ℃"
-    )
-
-with c2:
-    st.metric(
-        "최대 기온차",
-        f"{max_diff:.2f} ℃"
-    )
-
-with c3:
-    st.metric(
-        "최대 발생 시간",
-        max_time.strftime("%m월 %d일 %H시")
-    )
-
+st.line_chart(temperature_chart)
 
 
 # -----------------------------
-# 탭 구성
+# ② 시간별 평균 기온차
 # -----------------------------
-tab1, tab2, tab3 = st.tabs(
-    [
-        "📈 연간 변화",
-        "🕒 시간별 분석",
-        "📅 월별 분석"
-    ]
+st.header("② 시간(0~23시)별 평균 기온차")
+
+hour_diff = (
+    df.groupby("시각")["기온차"]
+    .mean()
+    .to_frame()
 )
 
+hour_diff.columns = ["서울-양평 평균 기온차(°C)"]
 
-
-# 1년 변화
-with tab1:
-
-    st.subheader(
-        "서울과 양평의 1년간 기온 변화"
-    )
-
-    chart = df.set_index("일시")[
-        [
-            "서울기온",
-            "양평기온"
-        ]
-    ]
-
-    st.line_chart(
-        chart,
-        height=500
-    )
-
-
-
-# 시간별
-with tab2:
-
-    st.subheader(
-        "시간대별 평균 기온차"
-    )
-
-    hour = (
-        df.groupby("시각")
-        ["기온차"]
-        .mean()
-        .round(2)
-        .to_frame()
-    )
-
-    hour.columns=[
-        "서울-양평 평균 기온차(℃)"
-    ]
-
-    st.bar_chart(
-        hour,
-        height=450
-    )
-
-
-    st.caption(
-        "※ 양수 값이 클수록 서울의 열섬 효과가 강함"
-    )
-
-
-
-# 월별
-with tab3:
-
-    st.subheader(
-        "월별 평균 기온차"
-    )
-
-    month = (
-        df.groupby("월")
-        ["기온차"]
-        .mean()
-        .round(2)
-        .to_frame()
-    )
-
-
-    month.columns=[
-        "서울-양평 평균 기온차(℃)"
-    ]
-
-    st.bar_chart(
-        month,
-        height=450
-    )
+st.bar_chart(hour_diff)
 
 
 
 # -----------------------------
-# 데이터 보기
+# ③ 월별 평균 기온차
 # -----------------------------
-with st.expander("📄 원본 데이터 확인"):
+st.header("③ 월(1~12월)별 평균 기온차")
 
-    st.dataframe(
-        df.head(100),
-        use_container_width=True
+month_diff = (
+    df.groupby("월")["기온차"]
+    .mean()
+    .to_frame()
+)
+
+month_diff.columns = ["서울-양평 평균 기온차(°C)"]
+
+st.bar_chart(month_diff)
+
+
+
+# -----------------------------
+# 요약 정보
+# -----------------------------
+st.header("📊 열섬현상 요약")
+
+avg_difference = df["기온차"].mean()
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "연평균 서울-양평 기온차",
+        f"{avg_difference:.2f} °C"
     )
+
+with col2:
+    st.metric(
+        "최대 기온차",
+        f"{df['기온차'].max():.2f} °C"
+    )
+
+with col3:
+    st.metric(
+        "최소 기온차",
+        f"{df['기온차'].min():.2f} °C"
+    )
+
+
+st.info(
+    "서울의 기온이 양평보다 높게 나타나는 경우(양수)는 "
+    "도시 열섬효과가 강하게 나타나는 시간 또는 계절로 해석할 수 있습니다."
+)
