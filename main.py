@@ -1,6 +1,4 @@
 ﻿import streamlit as st
  
-st.title("부엉이가 수영할 때 나는 소리는?")
-st.write("첨부엉 첨부엉")
-
-﻿
+st.title("나의 첫 웹앱")
+st.write("안녕하세요! 반갑습니다.")
