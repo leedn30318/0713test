@@ -2,140 +2,370 @@ import streamlit as st
 import pandas as pd
 
 
+# ---------------------------------
 # 페이지 설정
+# ---------------------------------
 st.set_page_config(
-    page_title="서울-양평 도시 열섬현상 분석",
+    page_title="서울·양평 열섬 및 전력 분석",
+    page_icon="🌡️",
     layout="wide"
 )
 
-st.title("🌡️ 서울과 양평의 기온 비교 - 도시 열섬현상 분석")
+
+st.title("🌡️ 서울·양평 기온 기반 열섬현상 및 전력수요 분석")
+st.write(
+    "2025년 시간별 데이터를 이용하여 도시 열섬현상과 "
+    "기온 변화에 따른 전력수요 관계를 분석합니다."
+)
 
 
-# -----------------------------
+
+# ---------------------------------
 # 데이터 불러오기
-# -----------------------------
+# ---------------------------------
 @st.cache_data
 def load_data():
 
-    seoul = pd.read_csv(
+    seoul_temp = pd.read_csv(
         "서울_기온.csv",
         encoding="cp949"
     )
 
-    yangpyeong = pd.read_csv(
+    yang_temp = pd.read_csv(
         "양평_기온.csv",
         encoding="cp949"
     )
 
+    power = pd.read_csv(
+        "전력수요.csv",
+        encoding="cp949"
+    )
+
+
     # 날짜 변환
-    seoul["일시"] = pd.to_datetime(seoul["일시"])
-    yangpyeong["일시"] = pd.to_datetime(yangpyeong["일시"])
+    seoul_temp["일시"] = pd.to_datetime(
+        seoul_temp["일시"]
+    )
 
-    return seoul, yangpyeong
+    yang_temp["일시"] = pd.to_datetime(
+        yang_temp["일시"]
+    )
+
+    power["일시"] = pd.to_datetime(
+        power["일시"]
+    )
 
 
-seoul, yangpyeong = load_data()
+    return seoul_temp, yang_temp, power
 
 
-# -----------------------------
+
+seoul, yang, power = load_data()
+
+
+
+# ---------------------------------
 # 데이터 전처리
-# -----------------------------
-seoul = seoul.rename(columns={"기온(°C)": "서울기온"})
-yangpyeong = yangpyeong.rename(columns={"기온(°C)": "양평기온"})
+# ---------------------------------
 
+# 기온 컬럼 이름 변경
+seoul = seoul.rename(
+    columns={
+        "기온(°C)": "서울기온"
+    }
+)
 
-# 날짜 기준 병합
-df = pd.merge(
-    seoul[["일시", "서울기온"]],
-    yangpyeong[["일시", "양평기온"]],
-    on="일시"
+yang = yang.rename(
+    columns={
+        "기온(°C)": "양평기온"
+    }
 )
 
 
-# 시간, 월 추출
-df["시각"] = df["일시"].dt.hour
-df["월"] = df["일시"].dt.month
 
-# 서울-양평 기온 차
-df["기온차"] = df["서울기온"] - df["양평기온"]
-
-
-
-# -----------------------------
-# ① 1년간 기온 변화
-# -----------------------------
-st.header("① 1년간 서울과 양평의 기온 변화")
-
-temperature_chart = df.set_index("일시")[
-    ["서울기온", "양평기온"]
-]
-
-st.line_chart(temperature_chart)
-
-
-# -----------------------------
-# ② 시간별 평균 기온차
-# -----------------------------
-st.header("② 시간(0~23시)별 평균 기온차")
-
-hour_diff = (
-    df.groupby("시각")["기온차"]
-    .mean()
-    .to_frame()
+# ================================
+# 탭 생성
+# ================================
+tab1, tab2 = st.tabs(
+    [
+        "🏙️ 열섬 분석",
+        "⚡ 전력 연결"
+    ]
 )
 
-hour_diff.columns = ["서울-양평 평균 기온차(°C)"]
-
-st.bar_chart(hour_diff)
 
 
+# =================================================
+# 탭1 : 열섬 분석
+# =================================================
+with tab1:
 
-# -----------------------------
-# ③ 월별 평균 기온차
-# -----------------------------
-st.header("③ 월(1~12월)별 평균 기온차")
-
-month_diff = (
-    df.groupby("월")["기온차"]
-    .mean()
-    .to_frame()
-)
-
-month_diff.columns = ["서울-양평 평균 기온차(°C)"]
-
-st.bar_chart(month_diff)
+    st.header("🏙️ 서울-양평 도시 열섬현상 분석")
 
 
-
-# -----------------------------
-# 요약 정보
-# -----------------------------
-st.header("📊 열섬현상 요약")
-
-avg_difference = df["기온차"].mean()
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric(
-        "연평균 서울-양평 기온차",
-        f"{avg_difference:.2f} °C"
-    )
-
-with col2:
-    st.metric(
-        "최대 기온차",
-        f"{df['기온차'].max():.2f} °C"
-    )
-
-with col3:
-    st.metric(
-        "최소 기온차",
-        f"{df['기온차'].min():.2f} °C"
+    # 서울 + 양평 병합
+    heat_df = pd.merge(
+        seoul[
+            ["일시", "서울기온"]
+        ],
+        yang[
+            ["일시", "양평기온"]
+        ],
+        on="일시"
     )
 
 
-st.info(
-    "서울의 기온이 양평보다 높게 나타나는 경우(양수)는 "
-    "도시 열섬효과가 강하게 나타나는 시간 또는 계절로 해석할 수 있습니다."
-)
+    heat_df["시각"] = (
+        heat_df["일시"]
+        .dt.hour
+    )
+
+    heat_df["월"] = (
+        heat_df["일시"]
+        .dt.month
+    )
+
+
+    heat_df["기온차"] = (
+        heat_df["서울기온"]
+        -
+        heat_df["양평기온"]
+    )
+
+
+    # -----------------------------
+    # ① 연간 기온 변화
+    # -----------------------------
+    st.subheader(
+        "① 1년간 서울과 양평의 기온 변화"
+    )
+
+
+    yearly = heat_df.set_index(
+        "일시"
+    )[
+        [
+            "서울기온",
+            "양평기온"
+        ]
+    ]
+
+
+    st.line_chart(
+        yearly,
+        height=450
+    )
+
+
+
+    # -----------------------------
+    # ② 시간별 평균 기온차
+    # -----------------------------
+    st.subheader(
+        "② 시각별 평균 기온차 (서울-양평)"
+    )
+
+
+    hourly_diff = (
+        heat_df
+        .groupby("시각")["기온차"]
+        .mean()
+        .round(2)
+        .to_frame()
+    )
+
+
+    hourly_diff.columns = [
+        "평균 기온차(℃)"
+    ]
+
+
+    st.bar_chart(
+        hourly_diff,
+        height=400
+    )
+
+
+    st.caption(
+        "※ 기온차가 클수록 서울의 도시 열섬 효과가 크게 나타남"
+    )
+
+
+
+    # -----------------------------
+    # ③ 월별 평균 기온차
+    # -----------------------------
+    st.subheader(
+        "③ 월별 평균 기온차 (서울-양평)"
+    )
+
+
+    monthly_diff = (
+        heat_df
+        .groupby("월")["기온차"]
+        .mean()
+        .round(2)
+        .to_frame()
+    )
+
+
+    monthly_diff.columns = [
+        "평균 기온차(℃)"
+    ]
+
+
+    st.bar_chart(
+        monthly_diff,
+        height=400
+    )
+
+
+
+# =================================================
+# 탭2 : 전력 연결
+# =================================================
+with tab2:
+
+    st.header(
+        "⚡ 서울 기온과 전력수요 관계 분석"
+    )
+
+
+    # 서울 기온 + 전력 병합
+    power_df = pd.merge(
+        seoul[
+            [
+                "일시",
+                "서울기온"
+            ]
+        ],
+        power[
+            [
+                "일시",
+                "전력수요(MWh)"
+            ]
+        ],
+        on="일시"
+    )
+
+
+    power_df["월"] = (
+        power_df["일시"]
+        .dt.month
+    )
+
+
+    # -----------------------------
+    # ① 산점도
+    # -----------------------------
+    st.subheader(
+        "① 기온과 전력수요 관계"
+    )
+
+
+    scatter = power_df[
+        [
+            "서울기온",
+            "전력수요(MWh)"
+        ]
+    ]
+
+
+    st.scatter_chart(
+        scatter,
+        x="서울기온",
+        y="전력수요(MWh)",
+        height=450
+    )
+
+
+    st.caption(
+        "※ 기온 변화에 따라 전력수요가 어떻게 변하는지 확인"
+    )
+
+
+
+    # -----------------------------
+    # ② 기온 구간별 평균 전력수요
+    # -----------------------------
+    st.subheader(
+        "② 기온 구간별 평균 전력수요"
+    )
+
+
+    # 기온 구간 생성
+    power_df["기온구간"] = pd.cut(
+        power_df["서울기온"],
+        bins=[
+            -20,0,5,10,15,20,25,30,40
+        ],
+        labels=[
+            "-20~0",
+            "0~5",
+            "5~10",
+            "10~15",
+            "15~20",
+            "20~25",
+            "25~30",
+            "30 이상"
+        ]
+    )
+
+
+    temp_power = (
+        power_df
+        .groupby("기온구간",
+                 observed=True)
+        ["전력수요(MWh)"]
+        .mean()
+        .round(1)
+        .to_frame()
+    )
+
+
+    st.bar_chart(
+        temp_power,
+        height=400
+    )
+
+
+
+    # -----------------------------
+    # ③ 월별 평균 전력수요
+    # -----------------------------
+    st.subheader(
+        "③ 월별 평균 전력수요"
+    )
+
+
+    month_power = (
+        power_df
+        .groupby("월")
+        ["전력수요(MWh)"]
+        .mean()
+        .round(1)
+        .to_frame()
+    )
+
+
+    st.bar_chart(
+        month_power,
+        height=400
+    )
+
+
+
+# ---------------------------------
+# 하단 데이터 확인
+# ---------------------------------
+with st.expander("📄 데이터 확인"):
+
+    st.write("서울-양평 기온 데이터")
+    st.dataframe(
+        heat_df.head(20)
+    )
+
+    st.write("서울 기온-전력 데이터")
+    st.dataframe(
+        power_df.head(20)
+    )
